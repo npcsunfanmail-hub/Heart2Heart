@@ -1,0 +1,935 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Heart2Heart</title>
+    <link rel="icon" href="logo.svg" type="image/svg+xml">
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+        body { background: #f2f2f7; min-height: 100vh; display: flex; justify-content: center; }
+        .app { max-width: 500px; width: 100%; min-height: 100vh; background: white; position: relative; display: flex; flex-direction: column; }
+        
+        /* Shared styles */
+        .section { padding: 20px; display: none; flex-direction: column; flex: 1; overflow-y: auto; }
+        .section.active { display: flex; }
+        .btn { padding: 14px; border-radius: 12px; border: none; font-weight: 600; cursor: pointer; font-size: 16px; }
+        .btn-purple { background: #9c27b0; color: white; }
+        .btn-purple:disabled { background: #ccc; }
+        .btn-red { background: #ff4444; color: white; }
+        .input { padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 16px; width: 100%; margin: 8px 0; }
+        .heading { font-size: 24px; font-weight: 700; margin: 16px 0; }
+        .subheading { color: #666; font-size: 14px; margin-bottom: 20px; }
+        
+        /* Onboarding */
+        #onboarding { justify-content: center; }
+        
+        /* Home */
+        #home { justify-content: space-between; }
+        .topic-grid { display: flex; flex-wrap: wrap; gap: 10px; margin: 20px 0; }
+        .topic-btn { padding: 10px 16px; border-radius: 20px; border: 1px solid #ddd; background: white; cursor: pointer; }
+        .topic-btn.selected { background: #9c27b0; color: white; border-color: #9c27b0; }
+        .safety-tip { background: #f3e5f5; padding: 12px; border-radius: 8px; color: #9c27b0; font-size: 14px; margin: 20px 0; }
+        
+        /* Chat */
+        #chat { padding: 0; }
+        .chat-header { padding: 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; }
+        .chat-messages { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+        .message { max-width: 70%; padding: 10px 14px; border-radius: 18px; font-size: 15px; }
+        .message.sent { background: #9c27b0; color: white; align-self: flex-end; }
+        .message.received { background: #f0f0f0; align-self: flex-start; }
+        .chat-input { padding: 16px; border-top: 1px solid #eee; display: flex; gap: 10px; }
+        .chat-input input { flex: 1; }
+        
+        /* Alerts */
+        .alert-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: none; justify-content: center; align-items: center; }
+        .alert-box { background: white; padding: 24px; border-radius: 16px; max-width: 300px; text-align: center; }
+        .verify-code-input:focus { border-color: #9c27b0; outline: none; box-shadow: 0 0 0 3px rgba(156,39,176,0.2); }
+        .confirm-box { background: white; padding: 24px; border-radius: 16px; max-width: 320px; text-align: center; }
+        .confirm-box p { font-size: 15px; line-height: 1.5; color: #333; margin: 12px 0 20px; }
+        .confirm-buttons { display: flex; gap: 10px; }
+        .confirm-buttons .btn { flex: 1; }
+    </style>
+</head>
+<body>
+    <div class="app">
+        <!-- Terms and Conditions Modal -->
+        <div id="termsModal" class="alert-overlay" style="display: flex; z-index: 1000;">
+            <div class="alert-box" style="max-width: 400px; max-height: 80vh; overflow-y: auto;">
+                <h2 style="margin-bottom: 16px;">Terms & Conditions</h2>
+                <div style="text-align: left; font-size: 13px; line-height: 1.5; color: #333; margin-bottom: 20px; padding: 12px; background: #f9f9f9; border-radius: 8px;">
+                    <p style="margin-bottom: 12px;"><strong>Disclaimer:</strong></p>
+                    <p style="margin-bottom: 10px;">Heart2Heart is not responsible for any of your personal information. Please do not share addresses, phone numbers, school names, or other personal details.</p>
+                    <p style="margin-bottom: 10px;">Heart2Heart is not responsible for any actions taken by users in or outside the app. This platform is for peer support only, not professional counseling.</p>
+                    <p style="margin-bottom: 10px;">By using this app, you acknowledge that Heart2Heart provides a platform for peer-to-peer chat and is not liable for any interactions, advice given, or harm that may occur.</p>
+                    <p>If you are in crisis, please call or text <strong>988</strong> (Suicide & Crisis Lifeline) immediately.</p>
+                </div>
+                <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 16px; cursor: pointer;">
+                    <input type="checkbox" id="agreeCheckbox">
+                    <span style="font-size: 14px;">I agree to the Terms & Conditions</span>
+                </label>
+                <button id="agreeBtn" class="btn btn-purple" style="width: 100%;" disabled>Agree & Continue</button>
+            </div>
+        </div>
+
+        <!-- Persistent Header -->
+        <div style="background: #9c27b0; color: white; padding: 12px 16px; display: flex; align-items: center; gap: 8px; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+            <img src="logo.svg" alt="Heart2Heart" style="width: 28px; height: 28px;">
+            <span style="font-size: 18px; font-weight: 700;">Heart2Heart</span>
+        </div>
+        
+        <!-- Onboarding Section -->
+        <div id="onboarding" class="section active">
+            <div style="text-align: center;">
+                <img src="logo.svg" alt="Heart2Heart" style="width: 80px; height: 80px; margin-bottom: 16px;">
+                <h1 class="heading">Heart2Heart</h1>
+                <p class="subheading">Talk to someone who understands</p>
+                
+                <select id="ageGroup" class="input">
+                    <option value="6-9">6-9 years</option>
+                    <option value="10-12" selected>10-12 years</option>
+                    <option value="13-15">13-15 years</option>
+                    <option value="16-17">16-17 years</option>
+                </select>
+                
+                <input type="email" id="email" class="input" placeholder="Your email address">
+                
+                <div id="parentConsentGroup">
+                    <label style="display: flex; align-items: center; gap: 8px; margin: 12px 0;">
+                        <input type="checkbox" id="parentConsent">
+                        <span style="font-size: 14px;">My parent knows I'm using this app</span>
+                    </label>
+                </div>
+                
+                <button id="startBtn" class="btn btn-purple" style="width: 100%;">Get Started</button>
+                <p style="font-size: 12px; color: #666; margin-top: 16px;">
+                    Parents: Consent required for under 13.
+                </p>
+            </div>
+        </div>
+
+        <!-- Email Verification Section -->
+        <div id="verifyEmail" class="section" style="padding: 16px;">
+            <div style="flex: 1; display: flex; flex-direction: column; align-items: center; text-align: center; justify-content: flex-start; padding-top: 24px;">
+                <img src="logo.svg" alt="Heart2Heart" style="width: 64px; height: 64px; margin-bottom: 12px;">
+                <h1 class="heading" style="font-size: 22px; margin: 8px 0;">Verify Your Email</h1>
+                <p class="subheading">We sent a 6-digit code to</p>
+                <p id="verifyEmailDisplay" style="font-weight: 600; color: #9c27b0; font-size: 15px; margin-bottom: 20px;"></p>
+                
+                <div style="display: flex; gap: 6px; margin: 0 0 20px; justify-content: center; width: 100%; max-width: 320px;">
+                    <input type="text" class="verify-code-input" maxlength="1" data-index="0" style="width: 44px; height: 50px; font-size: 22px; text-align: center; border: 2px solid #ddd; border-radius: 10px; font-weight: 700; caret-color: #9c27b0;">
+                    <input type="text" class="verify-code-input" maxlength="1" data-index="1" style="width: 44px; height: 50px; font-size: 22px; text-align: center; border: 2px solid #ddd; border-radius: 10px; font-weight: 700; caret-color: #9c27b0;">
+                    <input type="text" class="verify-code-input" maxlength="1" data-index="2" style="width: 44px; height: 50px; font-size: 22px; text-align: center; border: 2px solid #ddd; border-radius: 10px; font-weight: 700; caret-color: #9c27b0;">
+                    <input type="text" class="verify-code-input" maxlength="1" data-index="3" style="width: 44px; height: 50px; font-size: 22px; text-align: center; border: 2px solid #ddd; border-radius: 10px; font-weight: 700; caret-color: #9c27b0;">
+                    <input type="text" class="verify-code-input" maxlength="1" data-index="4" style="width: 44px; height: 50px; font-size: 22px; text-align: center; border: 2px solid #ddd; border-radius: 10px; font-weight: 700; caret-color: #9c27b0;">
+                    <input type="text" class="verify-code-input" maxlength="1" data-index="5" style="width: 44px; height: 50px; font-size: 22px; text-align: center; border: 2px solid #ddd; border-radius: 10px; font-weight: 700; caret-color: #9c27b0;">
+                </div>
+                
+                <button id="verifyBtn" class="btn btn-purple" style="width: 100%; max-width: 320px;" disabled>Verify</button>
+                
+                <div style="margin-top: 16px; font-size: 14px; color: #666;">
+                    Didn't get it? <button id="resendCodeBtn" style="background: none; border: none; color: #9c27b0; font-weight: 600; cursor: pointer; font-size: 14px; text-decoration: underline;">Resend Code</button>
+                </div>
+                <p id="countdownText" style="font-size: 12px; color: #999; margin-top: 8px;"></p>
+                <button id="backFromVerify" class="btn" style="width: 100%; max-width: 320px; margin-top: 16px; background: #f0f0f0;">← Back</button>
+            </div>
+        </div>
+
+        <!-- New Landing Home Section -->
+        <div id="home" class="section">
+            <div style="flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center;">
+                <img src="logo.svg" alt="Heart2Heart Logo" style="width: 120px; height: 120px; margin-bottom: 20px;">
+                <h1 class="heading" style="font-size: 32px;">Heart2Heart</h1>
+                <p style="color: #666; font-size: 16px; margin: 12px 20px 40px; line-height: 1.5;">
+                    Connect with kids who understand what you're going through. Safe, anonymous, 1-on-1 chats.
+                </p>
+                <button id="goToTopicsBtn" class="btn btn-purple" style="width: 80%; font-size: 18px; padding: 16px;">Start Chatting</button>
+                <button id="learnMoreBtn" class="btn" style="width: 80%; margin-top: 12px; background: #f0f0f0; font-size: 16px;">Learn More</button>
+            </div>
+            <div style="padding: 20px; text-align: center;">
+                <p style="color: #999; font-size: 13px; margin-bottom: 8px;">Created by Logan Robinson</p>
+                 <p style="color: #999; font-size: 13px; margin-bottom: 8px;">Inspired by Jody Lamacchia (Mom)</p>
+                <button id="safetyBtn2" class="btn" style="background: none; color: #9c27b0; font-size: 14px;">Safety Info</button>
+                <button id="signOutBtn" class="btn" style="background: none; color: #999; font-size: 13px; text-decoration: underline; margin-top: 12px; display: block; width: 100%;">Sign Out</button>
+            </div>
+        </div>
+
+        <!-- Topic Selection Section (formerly Home) -->
+        <div id="topicSelect" class="section">
+            <div>
+                <h1 class="heading">You're Not Alone 💜</h1>
+                <p class="subheading">Pick a topic to start chatting</p>
+                
+                <div class="topic-grid">
+                    <button class="topic-btn" data-topic="School Stress">School Stress</button>
+                    <button class="topic-btn" data-topic="Family Challenges">Family Challenges</button>
+                    <button class="topic-btn" data-topic="Bullying">Bullying</button>
+                    <button class="topic-btn" data-topic="Hard Feelings">Hard Feelings</button>
+                    <button class="topic-btn selected" data-topic="Just Talk">Just Talk</button>
+                </div>
+                
+                <div class="safety-tip" id="safetyTip">"You're not alone. Talking helps."</div>
+            </div>
+            
+            <div>
+                <button id="matchBtn" class="btn btn-purple" style="width: 100%;">Start Chatting</button>
+                <button id="safetyBtn" class="btn" style="width: 100%; margin-top: 10px; background: #f0f0f0;">Safety Info</button>
+                <button id="backToHome" class="btn" style="width: 100%; margin-top: 10px; background: #f0f0f0;">← Back</button>
+            </div>
+        </div>
+
+        <!-- Learn More Section -->
+        <div id="learnMore" class="section">
+            <div style="flex: 1; overflow-y: auto;">
+                <h1 class="heading">About Heart2Heart 💜</h1>
+                
+                <div style="background: #f3e5f5; padding: 16px; border-radius: 12px; margin-bottom: 20px;">
+                    <p style="font-size: 15px; line-height: 1.6; color: #4a148c;">
+                        Heart2Heart connects kids (ages 6-17) who are going through tough times. Chat 1-on-1 with someone who truly understands.
+                    </p>
+                </div>
+
+                <h3 style="margin: 16px 0 8px;">How it works:</h3>
+                <div style="display: flex; flex-direction: column; gap: 12px;">
+                    <div style="display: flex; gap: 12px; align-items: flex-start;">
+                        <span style="background: #9c27b0; color: white; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 14px;">1</span>
+                        <span style="font-size: 14px;">Pick a topic you want to talk about</span>
+                    </div>
+                    <div style="display: flex; gap: 12px; align-items: flex-start;">
+                        <span style="background: #9c27b0; color: white; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 14px;">2</span>
+                        <span style="font-size: 14px;">Get matched with another kid (just 2 people per chat)</span>
+                    </div>
+                    <div style="display: flex; gap: 12px; align-items: flex-start;">
+                        <span style="background: #9c27b0; color: white; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 14px;">3</span>
+                        <span style="font-size: 14px;">Chat and support each other</span>
+                    </div>
+                </div>
+
+                <h3 style="margin: 20px 0 8px;">Safety Features:</h3>
+                <div style="background: white; border: 1px solid #e0e0e0; border-radius: 12px; padding: 16px;">
+                    <p style="font-size: 14px; line-height: 1.8;">
+                        ✅ No personal info shared<br>
+                        ✅ Messages are scanned for safety<br>
+                        ✅ Report button for bad behavior<br>
+                        ✅ Parent consent for under 13<br>
+                        ✅ Crisis helpline info (988)
+                    </p>
+                </div>
+
+                <div style="background: #fff3e0; padding: 16px; border-radius: 12px; margin-top: 20px;">
+                    <p style="font-size: 14px; color: #e65100;">
+                        <strong>Need help now?</strong><br>
+                        Call 988 (Suicide & Crisis Lifeline)<br>
+                        Text HOME to 741741 (Crisis Text Line)
+                    </p>
+                </div>
+            </div>
+            <button id="backFromLearn" class="btn" style="width: 100%; background: #f0f0f0;">← Back</button>
+        </div>
+
+        <!-- Chat Section -->
+        <div id="chat" class="section">
+            <div class="chat-header">
+                <div style="display: flex; gap: 8px; align-items: center;">
+                    <button id="exitBtn" style="background: #ff4444; border: none; font-size: 14px; cursor: pointer; padding: 6px 12px; border-radius: 8px; font-weight: 600; color: white;" title="Exit Chat">Exit</button>
+                </div>
+                <div style="display: flex; align-items: center; gap: 6px;">
+                    <img src="logo.svg" alt="" style="width: 20px; height: 20px;">
+                    <span id="chatTopic" style="font-weight: 600;">Just Talk</span>
+                </div>
+                <button id="reportBtn" style="color: #ff4444; background: none; border: none; font-size: 14px; cursor: pointer;">Report</button>
+            </div>
+            
+            <div class="chat-messages" id="chatMessages"></div>
+            
+            <div class="chat-input">
+                <input type="text" id="messageInput" class="input" placeholder="Type something kind...">
+                <button id="sendBtn" class="btn btn-purple" style="padding: 10px 16px;">Send</button>
+            </div>
+        </div>
+
+        <!-- Alert Overlay -->
+        <div id="alertOverlay" class="alert-overlay">
+            <div class="alert-box">
+                <h3 id="alertTitle">Alert</h3>
+                <p id="alertMessage"></p>
+                <button id="alertCloseBtn" class="btn btn-purple" style="margin-top: 16px; width: 100%;">OK</button>
+            </div>
+        </div>
+
+        <!-- Exit Confirmation Modal -->
+        <div id="exitConfirmOverlay" class="alert-overlay">
+            <div class="confirm-box">
+                <h3 style="margin-bottom: 4px;">Leave Chat?</h3>
+                <p>This will end your current chat and bring you back to the home screen.</p>
+                <div class="confirm-buttons">
+                    <button id="exitConfirmNo" class="btn" style="background: #f0f0f0;">No</button>
+                    <button id="exitConfirmYes" class="btn btn-red">Yes, Exit</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyAFuaB8uy1nkWJW8SnxSnTvjD6a6Nl7Wec",
+            authDomain: "heart2heart-3.firebaseapp.com",
+            databaseURL: "https://heart2heart-3-default-rtdb.firebaseio.com",
+            projectId: "heart2heart-3",
+            storageBucket: "heart2heart-3.firebasestorage.app",
+            messagingSenderId: "934396328212",
+            appId: "1:934396328212:web:b57ca18c91e51ca3902a01",
+            measurementId: "G-9D4JBTV364"
+        };
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+        
+        // Initialize Analytics (optional)
+        if (typeof firebase.analytics === 'function') {
+            firebase.analytics();
+        }
+
+        // Cloudflare Worker URL - set this after deploying the worker
+        const WORKER_URL = 'https://heart2heart-verify.heart2heart-robinson.workers.dev';
+
+        // App State
+        let currentUser = null;
+        let currentSession = null;
+        let messagesListener = null;
+        let selectedTopic = "Just Talk";
+        let isMatching = false;
+        let matchUnsubscribe = null;
+        let verificationCode = '';
+        let verificationTimer = null;
+        let resendSeconds = 0;
+
+        const prohibitedWords = [
+            // Strong profanity
+            'fuck', 'fucking', 'fucked', 'fucker', 'motherfucker', 'motherfucking',
+            'shit', 'bitch', 'bitching', 'asshole', 'dick', 'cunt',
+            'pissed', 'piss', 'bastard', 'douche', 'douchebag',
+            // Racial & ethnic slurs
+            'nigger', 'nigga', 'niger', 'chink', 'spic', 'spick', 'gook', 'wetback',
+            'kike', 'raghead', 'sandnigger', 'sand nigger', 'coon', 'jigaboo',
+            'beaner', 'boong', 'cameljockey', 'camel jockey', 'dune coon',
+            'cracker', 'cracka', 'honky', 'honkey', 'redskin',
+            'white trash', 'porch monkey', 'jungle bunny', 'jiggaboo',
+            'tar baby', 'cotton picker', 'crow', 'darkie', 'darky',
+            'sambo', 'towelhead', 'towel head', 'hajji', 'haji',
+            'gringo', 'abeed', 'negro', 'negroid',
+            'coolie', 'paki', 'chinky', 'chinki', 'ching chong',
+            'nip', 'jap', 'gook', 'slanteye', 'slope',
+            'bohunk', 'hun', 'wop', 'dago', 'greaseball', 'guido',
+            'mick', 'polack', 'kraut', 'fritz', 'frogeater',
+            'limey', 'pom', 'tuckeye', 'yid', 'hebe', 'shylock',
+            'akata', 'macaque', 'kaffir', 'kaffer', 'hotnot', 'hottentot',
+            'munt', 'boer', 'rooinek', 'shiptar', 'tsigane', 'zigeuner',
+            'gypsy', 'gyp', 'mick', 'spook', 'buckwheat',
+            'pickaninny', 'pickanning', 'bluegum', 'burrhead', 'burr head',
+            'eight ball', 'zigabo', 'zoomie', 'zulu',
+            // Anti-LGBTQ+ slurs
+            'faggot', 'fag', 'tranny', 'shemale', 'dyke',
+            'queer', 'homo', 'lesbo', 'butch',
+            'he she', 'sodomite', 'pillowbiter', 'rug muncher',
+            'gender bender', 'tramy', 'he-she',
+            // Disability slurs
+            'retard', 'retarded', 'mongoloid', 'spaz', 'spastic',
+            'cripple', 'midget', 'invalid',
+            'window licker', 'mong', 'gimp', 'imbecile', 'moron',
+            // Religious slurs
+            'christkiller', 'christ killer', 'god damn', 'goddamn', 'goddam',
+            'infidel', 'muzzie', 'muzzy', 'muslim',
+            // Hate group references
+            'nazi', 'hitler', 'kkk', 'klux', 'white power',
+            'white supremacist', 'master race', 'aryan',
+            // Sexual terms (for kids safety)
+            'porn', 'porno', 'pornography', 'pornhub', 'xnxx',
+            'sex', 'sexy', 'blowjob', 'handjob', 'anal', 'oral',
+            'dildo', 'vibrator', 'masturbate', 'masturbation',
+            'cum', 'jizz', 'semen', 'orgasm', 'orgy',
+            'prostitute', 'hooker', 'escort', 'stripper',
+            'incest', 'molest', 'pedophile', 'pedo', 'child porn',
+            'bdsm', 'bondage', 'fetish', 'kinky',
+            'nude', 'naked', 'stripping',
+            'cock', 'pussy', 'tits', 'titties', 'boobs', 'boobies',
+            'penis', 'vagina', 'dickhead', 'assface', 'shithead',
+            // Violence & gore
+            'rape', 'rapist', 'murder', 'kill you', 'beat you',
+            'slit your', 'cut your', 'shoot you', 'stab you',
+        ];
+
+        const crisisKeywords = [
+            'suicide', 'kill myself', 'want to die', 'end my life',
+            'self-harm', 'self harm', 'hurt myself',
+        ];
+
+        function scanMessage(text) {
+            const lower = text.toLowerCase();
+
+            if (/(\d{3}[-.\s]\d{3}[-.\s]\d{4})|(\(\d{3}\)\s*\d{3}[-.\s]\d{4})/.test(text)) {
+                return { safe: false, type: 'personal', message: 'Please don\'t share phone numbers. Stay safe!' };
+            }
+            if (/[\w.-]+@[\w.-]+\.\w+/.test(text)) {
+                return { safe: false, type: 'personal', message: 'Please don\'t share email addresses. Stay safe!' };
+            }
+            if (/\b\d{3}-\d{2}-\d{4}\b/.test(text)) {
+                return { safe: false, type: 'personal', message: 'Please don\'t share personal information. Stay safe!' };
+            }
+
+            for (const word of prohibitedWords) {
+                if (new RegExp('\\b' + word + '\\b', 'i').test(text)) {
+                    return { safe: false, type: 'prohibited', message: 'This message can\'t be sent. Please keep it kind and respectful.' };
+                }
+            }
+
+            for (const phrase of crisisKeywords) {
+                if (lower.includes(phrase)) {
+                    return { safe: false, type: 'crisis', message: '' };
+                }
+            }
+
+            return { safe: true };
+        }
+
+        const safetyTips = [
+            "You're not alone. Talking helps.",
+            "It's okay to feel sad sometimes.",
+            "You are stronger than you know.",
+            "Your feelings matter.",
+            "Tomorrow is a new day."
+        ];
+
+        const alertOverlay = document.getElementById('alertOverlay');
+        const alertTitle = document.getElementById('alertTitle');
+        const alertMessage = document.getElementById('alertMessage');
+
+        // Show Alert
+        function showAlert(title, message) {
+            alertTitle.textContent = title;
+            alertMessage.textContent = message;
+            alertOverlay.style.display = 'flex';
+            // Prevent background scrolling
+            document.body.style.overflow = 'hidden';
+        }
+
+        // Close Alert
+        function closeAlert() {
+            alertOverlay.style.display = 'none';
+            document.body.style.overflow = 'auto';
+        }
+
+        // Define all sections
+        const sections = {
+            onboarding: document.getElementById('onboarding'),
+            verifyEmail: document.getElementById('verifyEmail'),
+            home: document.getElementById('home'),
+            topicSelect: document.getElementById('topicSelect'),
+            learnMore: document.getElementById('learnMore'),
+            chat: document.getElementById('chat')
+        };
+
+        // Switch Section
+        function switchSection(sectionName) {
+            Object.values(sections).forEach(s => {
+                if (s) s.classList.remove('active');
+            });
+            if (sections[sectionName]) {
+                sections[sectionName].classList.add('active');
+            }
+        }
+
+        // Show/hide email fields based on age
+        function updateOnboardingFields() {
+            const age = document.getElementById('ageGroup').value;
+            const isUnder13 = age === '6-9' || age === '10-12';
+            const emailInput = document.getElementById('email');
+
+            emailInput.placeholder = isUnder13 ? 'Parent/Guardian Email' : 'Your email address';
+            document.getElementById('parentConsentGroup').style.display = isUnder13 ? 'block' : 'none';
+        }
+        document.getElementById('ageGroup').addEventListener('change', updateOnboardingFields);
+        updateOnboardingFields();
+
+        // Onboarding
+        document.getElementById('startBtn').addEventListener('click', () => {
+            const ageGroup = document.getElementById('ageGroup').value;
+            const isUnder13 = ageGroup === '6-9' || ageGroup === '10-12';
+            const email = document.getElementById('email').value.trim();
+            const parentConsent = document.getElementById('parentConsent').checked;
+
+            if (!email || !email.includes('@')) return showAlert('Error', 'Please enter a valid email address');
+            if (isUnder13 && !parentConsent) return showAlert('Error', 'Parent consent required');
+            
+            currentUser = {
+                id: 'user_' + Date.now(),
+                ageGroup,
+                email,
+                parentEmail: isUnder13 ? email : '',
+                createdAt: new Date()
+            };
+            localStorage.setItem('kidsCopeUser', JSON.stringify(currentUser));
+            sendVerificationCode(email);
+        });
+
+        // Auto-advance between verification code inputs
+        document.querySelectorAll('.verify-code-input').forEach(input => {
+            input.addEventListener('input', function() {
+                this.value = this.value.replace(/\D/g, '');
+                const idx = parseInt(this.dataset.index);
+                if (this.value && idx < 5) {
+                    document.querySelector('.verify-code-input[data-index="' + (idx + 1) + '"]').focus();
+                }
+                updateVerifyBtn();
+            });
+            input.addEventListener('keydown', function(e) {
+                const idx = parseInt(this.dataset.index);
+                if (e.key === 'Backspace' && !this.value && idx > 0) {
+                    document.querySelector('.verify-code-input[data-index="' + (idx - 1) + '"]').focus();
+                }
+            });
+            input.addEventListener('paste', function(e) {
+                e.preventDefault();
+                const paste = (e.clipboardData || window.clipboardData).getData('text').replace(/\D/g, '').slice(0, 6);
+                document.querySelectorAll('.verify-code-input').forEach((inp, i) => {
+                    if (paste[i]) inp.value = paste[i];
+                });
+                const target = Math.min(paste.length, 5);
+                document.querySelector('.verify-code-input[data-index="' + target + '"]').focus();
+                updateVerifyBtn();
+            });
+        });
+
+        function updateVerifyBtn() {
+            const filled = Array.from(document.querySelectorAll('.verify-code-input')).every(inp => inp.value);
+            document.getElementById('verifyBtn').disabled = !filled;
+        }
+
+        // Verify code
+        document.getElementById('verifyBtn').addEventListener('click', () => {
+            const entered = Array.from(document.querySelectorAll('.verify-code-input')).map(inp => inp.value).join('');
+            if (entered === verificationCode) {
+                if (verificationTimer) clearInterval(verificationTimer);
+                verificationTimer = null;
+                currentUser.verified = true;
+                localStorage.setItem('kidsCopeUser', JSON.stringify(currentUser));
+                switchSection('home');
+                updateSafetyTip();
+            } else {
+                showAlert('Invalid Code', 'The code you entered is incorrect. Please try again.');
+                document.querySelectorAll('.verify-code-input').forEach(inp => inp.value = '');
+                document.querySelector('.verify-code-input[data-index="0"]').focus();
+                document.getElementById('verifyBtn').disabled = true;
+            }
+        });
+
+        // Resend code
+        document.getElementById('resendCodeBtn').addEventListener('click', () => {
+            if (currentUser) {
+                const verifyEmail = getVerifyEmail(currentUser);
+                if (verifyEmail) sendVerificationCode(verifyEmail);
+            }
+        });
+
+        // Back from verification
+        document.getElementById('backFromVerify').addEventListener('click', () => {
+            if (verificationTimer) clearInterval(verificationTimer);
+            verificationTimer = null;
+            switchSection('onboarding');
+        });
+
+        function getVerifyEmail(user) {
+            return user.email;
+        }
+
+        // Load saved user
+        const savedUser = localStorage.getItem('kidsCopeUser');
+        if (savedUser) {
+            currentUser = JSON.parse(savedUser);
+            if (currentUser.verified) {
+                switchSection('home');
+            } else {
+                switchSection('onboarding');
+            }
+        }
+
+        // Landing Page Buttons
+        document.getElementById('goToTopicsBtn').addEventListener('click', () => {
+            if (!currentUser) {
+                switchSection('onboarding');
+            } else {
+                switchSection('topicSelect');
+            }
+        });
+
+        document.getElementById('learnMoreBtn').addEventListener('click', () => {
+            switchSection('learnMore');
+        });
+
+        document.getElementById('backFromLearn').addEventListener('click', () => {
+            switchSection('home');
+        });
+
+        document.getElementById('backToHome').addEventListener('click', () => {
+            // Cancel matching if in progress
+            if (isMatching && currentSession) {
+                // Delete the waiting session from Firebase
+                db.collection('sessions').doc(currentSession.id).delete().catch(err => console.log('Session already cleaned up'));
+                resetMatching();
+            }
+            switchSection('home');
+        });
+
+        document.getElementById('safetyBtn2').addEventListener('click', () => {
+            showAlert('Safety Info', '• Never share personal info (address, phone, school)\n• Report bad behavior\n• Chats are 1-on-1 only\n• Call 988 if you need help');
+        });
+
+        document.getElementById('safetyBtn').addEventListener('click', () => {
+            showAlert('Safety Info', '• Never share personal info (address, phone, school)\n• Report bad behavior\n• Chats are 1-on-1 only\n• Call 988 if you need help');
+        });
+
+        // Sign Out
+        document.getElementById('signOutBtn').addEventListener('click', () => {
+            if (currentUser && !isMatching && currentSession) {
+                if (!confirm('End your current chat and sign out?')) return;
+                db.collection('sessions').doc(currentSession.id).update({ status: 'ended', endedAt: new Date() }).catch(() => {});
+                if (messagesListener) messagesListener();
+            }
+            if (isMatching && currentSession) {
+                db.collection('sessions').doc(currentSession.id).delete().catch(() => {});
+                resetMatching();
+            }
+            if (verificationTimer) clearInterval(verificationTimer);
+            localStorage.removeItem('kidsCopeUser');
+            localStorage.removeItem('termsAccepted');
+            currentUser = null;
+            currentSession = null;
+            document.getElementById('chatMessages').innerHTML = '';
+            document.getElementById('termsModal').style.display = 'flex';
+            document.getElementById('agreeCheckbox').checked = false;
+            document.getElementById('agreeBtn').disabled = true;
+            switchSection('onboarding');
+            resetCodeInputs();
+        });
+
+        // Topic Selection
+        document.querySelectorAll('.topic-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.topic-btn').forEach(b => b.classList.remove('selected'));
+                btn.classList.add('selected');
+                selectedTopic = btn.dataset.topic;
+            });
+        });
+
+        // Update Safety Tip
+        function updateSafetyTip() {
+            document.getElementById('safetyTip').textContent = `"${safetyTips[Math.floor(Math.random() * safetyTips.length)]}"`;
+        }
+
+        // Send 6-digit verification code to email
+        async function sendVerificationCode(email) {
+            verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+            document.getElementById('verifyEmailDisplay').textContent = email;
+
+            try {
+                const res = await fetch(WORKER_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, code: verificationCode }),
+                });
+
+                if (!res.ok) {
+                    const data = await res.json();
+                    throw new Error(data.error || 'Failed to send email');
+                }
+            } catch (err) {
+                console.error('Email send error:', err);
+                showAlert('Email Error', 'Could not send verification code. Check your internet connection or try again later.');
+                return;
+            }
+
+            switchSection('verifyEmail');
+            resetCodeInputs();
+            startCountdown();
+        }
+
+        function resetCodeInputs() {
+            document.querySelectorAll('.verify-code-input').forEach(inp => inp.value = '');
+            document.getElementById('verifyBtn').disabled = true;
+            const first = document.querySelector('.verify-code-input[data-index="0"]');
+            if (first) first.focus();
+        }
+
+        function startCountdown() {
+            resendSeconds = 30;
+            document.getElementById('resendCodeBtn').style.display = 'none';
+            document.getElementById('countdownText').textContent = 'Resend in ' + resendSeconds + 's';
+            if (verificationTimer) clearInterval(verificationTimer);
+            verificationTimer = setInterval(() => {
+                resendSeconds--;
+                if (resendSeconds <= 0) {
+                    clearInterval(verificationTimer);
+                    verificationTimer = null;
+                    document.getElementById('resendCodeBtn').style.display = 'inline';
+                    document.getElementById('countdownText').textContent = '';
+                } else {
+                    document.getElementById('countdownText').textContent = 'Resend in ' + resendSeconds + 's';
+                }
+            }, 1000);
+        }
+
+        // Match Making (from topicSelect)
+        document.getElementById('matchBtn').addEventListener('click', async () => {
+            if (isMatching) return; // Prevent double clicks
+            
+            isMatching = true;
+            const matchBtn = document.getElementById('matchBtn');
+            matchBtn.textContent = 'Finding someone...';
+            matchBtn.disabled = true;
+
+            try {
+                const sessionsRef = db.collection('sessions');
+                
+                // First, look for existing waiting session with same topic and age group
+                const snapshot = await sessionsRef
+                    .where('status', '==', 'waiting')
+                    .where('topic', '==', selectedTopic)
+                    .where('ageGroup', '==', currentUser.ageGroup)
+                    .limit(1)
+                    .get();
+
+                if (!snapshot.empty && isMatching) {
+                    // Join existing session
+                    const sessionDoc = snapshot.docs[0];
+                    const session = sessionDoc.data();
+                    
+                    // Make sure we're not joining our own session
+                    if (!session.participantIds.includes(currentUser.id)) {
+                        await sessionDoc.ref.update({
+                            participantIds: [...session.participantIds, currentUser.id],
+                            status: 'active'
+                        });
+                        currentSession = { id: sessionDoc.id, ...session, status: 'active', participantIds: [...session.participantIds, currentUser.id] };
+                        startChat();
+                        return;
+                    }
+                }
+                
+                // Create new waiting session
+                if (!isMatching) return; // User cancelled
+                
+                const newSession = {
+                    participantIds: [currentUser.id],
+                    status: 'waiting',
+                    topic: selectedTopic,
+                    ageGroup: currentUser.ageGroup,
+                    startedAt: new Date(),
+                    messages: []
+                };
+                const docRef = await sessionsRef.add(newSession);
+                currentSession = { id: docRef.id, ...newSession };
+                
+                // Listen for someone to join (with cancellation support)
+                matchBtn.textContent = 'Waiting for someone...';
+                matchUnsubscribe = db.collection('sessions').doc(docRef.id).onSnapshot(doc => {
+                    if (!isMatching) return; // Stop if cancelled
+                    const data = doc.data();
+                    if (data.participantIds.length >= 2 && data.status === 'active') {
+                        if (matchUnsubscribe) matchUnsubscribe();
+                        currentSession = { id: doc.id, ...data };
+                        startChat();
+                    }
+                });
+                
+            } catch (error) {
+                console.error('Matching error:', error);
+                if (isMatching) {
+                    showAlert('Error', 'Failed to find a match. Try again.');
+                    resetMatching();
+                }
+            }
+        });
+
+        function resetMatching() {
+            isMatching = false;
+            if (matchUnsubscribe) {
+                matchUnsubscribe();
+                matchUnsubscribe = null;
+            }
+            const matchBtn = document.getElementById('matchBtn');
+            matchBtn.textContent = 'Start Chatting';
+            matchBtn.disabled = false;
+        }
+
+        // Start Chat
+        function startChat() {
+            resetMatching();
+            document.getElementById('chatTopic').textContent = currentSession.topic;
+            switchSection('chat');
+            loadMessages();
+        }
+
+        // Load Messages
+        function loadMessages() {
+            if (messagesListener) messagesListener();
+            const messagesContainer = document.getElementById('chatMessages');
+            messagesContainer.innerHTML = '';
+
+            messagesListener = db.collection('sessions').doc(currentSession.id)
+                .collection('messages')
+                .orderBy('timestamp')
+                .onSnapshot(snapshot => {
+                    messagesContainer.innerHTML = '';
+                    snapshot.forEach(doc => {
+                        const msg = doc.data();
+                        appendMessage(msg);
+                    });
+                });
+        }
+
+        function appendMessage(msg) {
+            const messagesContainer = document.getElementById('chatMessages');
+            const div = document.createElement('div');
+
+            if (msg.isSystemMessage) {
+                div.className = 'message system';
+                div.style.cssText = 'text-align: center; color: #999; font-size: 13px; padding: 10px;';
+            } else {
+                div.className = `message ${msg.senderId === currentUser.id ? 'sent' : 'received'}`;
+            }
+            div.textContent = msg.content;
+            messagesContainer.appendChild(div);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        // Send Message
+        document.getElementById('sendBtn').addEventListener('click', sendMessage);
+        document.getElementById('messageInput').addEventListener('keypress', e => {
+            if (e.key === 'Enter') sendMessage();
+        });
+
+        async function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const text = input.value.trim();
+            if (!text) return;
+
+            const result = scanMessage(text);
+            if (!result.safe) {
+                input.value = '';
+                if (result.type === 'crisis') {
+                    showAlert('Need Help?', 'If you\'re going through a hard time, help is available. Call or text 988 anytime.');
+                } else {
+                    showAlert('Message Blocked', result.message);
+                }
+                return;
+            }
+
+            try {
+                await db.collection('sessions').doc(currentSession.id).collection('messages').add({
+                    senderId: currentUser.id,
+                    content: text,
+                    timestamp: new Date()
+                });
+                input.value = '';
+            } catch (error) {
+                console.error('Send error:', error);
+            }
+        }
+
+        // Exit Button - return to home screen
+        document.getElementById('exitBtn').addEventListener('click', async () => {
+            // Cancel matching if in progress
+            if (isMatching && currentSession) {
+                db.collection('sessions').doc(currentSession.id).delete().catch(err => console.log('Session already cleaned up'));
+                resetMatching();
+                switchSection('home');
+                return;
+            }
+            document.getElementById('exitConfirmOverlay').style.display = 'flex';
+        });
+
+        // Exit confirmation - No
+        document.getElementById('exitConfirmNo').addEventListener('click', () => {
+            document.getElementById('exitConfirmOverlay').style.display = 'none';
+        });
+
+        // Exit confirmation - Yes
+        document.getElementById('exitConfirmYes').addEventListener('click', async () => {
+            document.getElementById('exitConfirmOverlay').style.display = 'none';
+            if (currentSession) {
+                try {
+                    await db.collection('sessions').doc(currentSession.id).collection('messages').add({
+                        senderId: 'system',
+                        content: 'The other user has disconnected.',
+                        timestamp: new Date(),
+                        isSystemMessage: true
+                    });
+                    await db.collection('sessions').doc(currentSession.id).update({
+                        status: 'ended',
+                        endedAt: new Date()
+                    });
+                } catch (err) {
+                    console.log('Session already ended or deleted');
+                }
+                if (messagesListener) messagesListener();
+                currentSession = null;
+                document.getElementById('chatMessages').innerHTML = '';
+            }
+            switchSection('home');
+        });
+
+        // Exit confirmation - close on overlay click
+        document.getElementById('exitConfirmOverlay').addEventListener('click', (e) => {
+            if (e.target === document.getElementById('exitConfirmOverlay')) {
+                document.getElementById('exitConfirmOverlay').style.display = 'none';
+            }
+        });
+
+        // Report Chat
+        document.getElementById('reportBtn').addEventListener('click', async () => {
+            resetMatching();
+            if (currentSession) {
+                await db.collection('sessions').doc(currentSession.id).update({ status: 'reported' }).catch(err => console.log('Already reported'));
+                if (messagesListener) messagesListener();
+                currentSession = null;
+                document.getElementById('chatMessages').innerHTML = '';
+                switchSection('home');
+                showAlert('Reported', 'Thank you for reporting. We will review this session.');
+            }
+        });
+
+        // Safety Info
+        document.getElementById('safetyBtn').addEventListener('click', () => {
+            showAlert('Safety Info', '• Never share personal info (address, phone, school)\n• Report bad behavior\n• Chats are 1-on-1 only\n• Call 988 if you need help');
+        });
+
+        // Close Alert
+        document.getElementById('alertCloseBtn').addEventListener('click', closeAlert);
+        alertOverlay.addEventListener('click', (e) => {
+            if (e.target === alertOverlay) closeAlert();
+        });
+
+        // Update safety tip every 30 seconds
+        setInterval(updateSafetyTip, 30000);
+
+        // Terms and Conditions Modal
+        const termsModal = document.getElementById('termsModal');
+        const agreeCheckbox = document.getElementById('agreeCheckbox');
+        const agreeBtn = document.getElementById('agreeBtn');
+
+        agreeCheckbox.addEventListener('change', function() {
+            agreeBtn.disabled = !this.checked;
+        });
+
+        agreeBtn.addEventListener('click', function() {
+            if (agreeCheckbox.checked) {
+                termsModal.style.display = 'none';
+            }
+        });
+    </script>
+</body>
+</html>
