@@ -325,99 +325,141 @@
             'self-harm', 'self harm', 'hurt myself',
         ];
 
+        function normalizeText(text) {
+            let t = text.toLowerCase().trim();
+            const leet = {
+                '4': 'a', '@': 'a', '/\\': 'a',
+                '8': 'b', '|3': 'b',
+                '3': 'e', '€': 'e',
+                '9': 'g', '6': 'g',
+                '1': 'i', '!': 'i', '|': 'i',
+                '0': 'o',
+                '5': 's', '$': 's',
+                '7': 't', '+': 't',
+                '2': 'z',
+            };
+            t = t.replace(/\b(\w)\s+(\w)\s+(\w)\s+(\w)\s+(\w)\b/g, '$1$2$3$4$5');
+            t = t.replace(/\b(\w)\s+(\w)\s+(\w)\s+(\w)\b/g, '$1$2$3$4');
+            t = t.replace(/\b(\w)\s+(\w)\s+(\w)\b/g, '$1$2$3');
+            t = t.replace(/\b(\w)\s+(\w)\b/g, '$1$2');
+            t = t.replace(/[.\-_\|]+/g, '');
+            for (const [from, to] of Object.entries(leet)) {
+                t = t.replaceAll(from, to);
+            }
+            return t;
+        }
+
         function scanMessage(text) {
             const lower = text.toLowerCase().trim();
-            const words = lower.split(/\s+/);
+            const normalized = normalizeText(text);
 
-            // URLs and links
-            if (/https?:\/\/|www\.\S+/.test(lower)) {
-                return { safe: false, type: 'personal', message: 'Links aren\'t allowed. Stay safe!' };
-            }
-
-            // Phone numbers (any format)
-            if (/(\d{3}[-.\s]\d{3}[-.\s]\d{4})|(\(\d{3}\)\s*\d{3}[-.\s]\d{4})/.test(text)) {
-                return { safe: false, type: 'personal', message: 'Please don\'t share phone numbers. Stay safe!' };
-            }
-
-            // Email addresses
-            if (/[\w.-]+@[\w.-]+\.\w+/.test(text)) {
-                return { safe: false, type: 'personal', message: 'Please don\'t share email addresses. Stay safe!' };
-            }
-
-            // Social Security / IDs
-            if (/\b\d{3}-\d{2}-\d{4}\b/.test(text)) {
-                return { safe: false, type: 'personal', message: 'Please don\'t share personal information. Stay safe!' };
-            }
-
-            // Social media handles (@username)
-            if (/@\w{3,}/.test(text)) {
-                return { safe: false, type: 'personal', message: 'Please don\'t share social media handles. Stay safe!' };
-            }
-
-            // Age disclosure (I'm X, I am X, age X, X years old)
-            if (/\b(i['']?m|i am|im)\s+(\d{1,2})\b/i.test(text) && !/\b(i['']?m|i am|im)\s+100\b/i.test(text)) {
-                return { safe: false, type: 'personal', message: 'Please don\'t share your age. Stay safe!' };
-            }
-            if (/\b(\d{1,2})\s*years?\s*old\b/i.test(text)) {
-                return { safe: false, type: 'personal', message: 'Please don\'t share your age. Stay safe!' };
-            }
-            if (/\bage\s+(\d{1,2})\b/i.test(text)) {
-                return { safe: false, type: 'personal', message: 'Please don\'t share your age. Stay safe!' };
-            }
-
-            // Location sharing
-            const locationPatterns = [
-                'i live in', 'i live at', 'i live near', "i'm from", 'i am from',
-                'i am at', "i'm at", 'my address', 'my location', 'my city',
-                'my state', 'my town', 'my zip', 'my country',
-                'where i live', 'where do you live', 'where r u from',
-                'what state', 'what city', 'what country',
+            const sources = [
+                { text: lower, label: 'original' },
+                { text: normalized, label: 'normalized' },
             ];
-            for (const pattern of locationPatterns) {
-                if (lower.includes(pattern)) {
-                    return { safe: false, type: 'personal', message: 'Please don\'t share your location. Stay safe!' };
-                }
-            }
 
-            // Meeting up / gathering
-            const meetPatterns = [
-                'meet me', 'meet up', 'meet you', "let's meet", 'lets meet',
-                'come over', 'come to', 'come hang', 'come see',
-                'can we meet', 'want to meet', 'wanna meet',
-                'can you come', 'you come to', 'come to my',
-                'hang out', 'hangout',
-            ];
-            for (const pattern of meetPatterns) {
-                if (lower.includes(pattern)) {
-                    return { safe: false, type: 'personal', message: 'Please don\'t arrange to meet up. Stay safe!' };
-                }
-            }
+            for (const src of sources) {
+                const t = src.text;
 
-            // Asking for personal info
-            const askPatterns = [
-                'whats your', "what's your", 'what is your',
-                'tell me your', 'give me your',
-                'how old are', 'where do you', 'where are you',
-                'where r u', 'are you a boy', 'are you a girl',
-                'send me', 'dm me', 'message me',
-            ];
-            for (const pattern of askPatterns) {
-                if (lower.includes(pattern)) {
-                    return { safe: false, type: 'personal', message: 'Please don\'t ask for personal information. Stay safe!' };
+                if (/https?:\/\/|www\.\S+|\.com\b|\.org\b|\.net\b/.test(t)) {
+                    return { safe: false, type: 'personal', message: 'Links are not allowed. Please keep chat safe.' };
                 }
-            }
 
-            // Prohibited words with word boundaries
-            for (const word of prohibitedWords) {
-                if (new RegExp('\\b' + word.replace(/'/g, "['']?").replace(/ /g, '\\s+') + '\\b', 'i').test(text)) {
-                    return { safe: false, type: 'prohibited', message: 'This message can\'t be sent. Please keep it kind and respectful.' };
+                if (/(\d{3}[-.\s]\d{3}[-.\s]\d{4})|(\(\d{3}\)\s*\d{3}[-.\s]\d{4})/.test(t)) {
+                    return { safe: false, type: 'personal', message: 'Phone numbers are not allowed. Please keep chat safe.' };
                 }
-            }
 
-            // Crisis keywords
-            for (const phrase of crisisKeywords) {
-                if (lower.includes(phrase)) {
-                    return { safe: false, type: 'crisis', message: '' };
+                if (/[\w.-]+@[\w.-]+\.\w+/.test(t)) {
+                    return { safe: false, type: 'personal', message: 'Email addresses are not allowed. Please keep chat safe.' };
+                }
+
+                if (/\b\d{3}-\d{2}-\d{4}\b/.test(t)) {
+                    return { safe: false, type: 'personal', message: 'Personal information is not allowed. Please keep chat safe.' };
+                }
+
+                if (/@\w{2,}/.test(t)) {
+                    return { safe: false, type: 'personal', message: 'Social media handles are not allowed. Please keep chat safe.' };
+                }
+
+                if (/\b(discord|snapchat|instagram|tiktok|twitter|x\.com|kik|telegram|whatsapp|facebook|signal|onlyfans|patreon)\b/i.test(t)) {
+                    return { safe: false, type: 'personal', message: 'Mentioning other apps is not allowed. Please keep chat safe.' };
+                }
+
+                if (/\b(i['']?m|i am|im)\s+(\d{1,2})\b/i.test(t) && !/\b(i['']?m|i am|im)\s+100\b/i.test(t)) {
+                    return { safe: false, type: 'personal', message: 'Sharing your age is not allowed. Please keep chat safe.' };
+                }
+                if (/\b(\d{1,2})\s*years?\s*old\b/i.test(t)) {
+                    return { safe: false, type: 'personal', message: 'Sharing your age is not allowed. Please keep chat safe.' };
+                }
+                if (/\bage\s+(\d{1,2})\b/i.test(t)) {
+                    return { safe: false, type: 'personal', message: 'Sharing your age is not allowed. Please keep chat safe.' };
+                }
+
+                const locationPatterns = [
+                    'i live in', 'i live at', 'i live near', 'i live on',
+                    'i am from', 'i am at', 'i go to school', 'i go to',
+                    'my address', 'my location', 'my city', 'my state',
+                    'my town', 'my zip', 'my country', 'my neighborhood',
+                    'my street', 'my school', 'my school name',
+                    'where i live', 'where do you live', 'where r u from',
+                    'what state', 'what city', 'what country',
+                ];
+                for (const pattern of locationPatterns) {
+                    if (t.includes(pattern)) {
+                        return { safe: false, type: 'personal', message: 'Sharing your location is not allowed. Please keep chat safe.' };
+                    }
+                }
+
+                const meetPatterns = [
+                    'meet me', 'meet up', 'meet you', 'meet us',
+                    'come over', 'come to', 'come hang', 'come see',
+                    'can we meet', 'want to meet', 'wanna meet',
+                    'can you come', 'you come to', 'come to my',
+                    'hang out', 'hangout',
+                    'lets meet', 'let us meet',
+                    'play together', 'play with me',
+                    'sleepover', 'sleep over',
+                    'come to my house', 'at my house',
+                ];
+                for (const pattern of meetPatterns) {
+                    if (t.includes(pattern)) {
+                        return { safe: false, type: 'personal', message: 'Arranging to meet up is not allowed. Please keep chat safe.' };
+                    }
+                }
+
+                const askPatterns = [
+                    'whats your', "what's your", 'what is your',
+                    'tell me your', 'give me your',
+                    'how old are', 'where do you', 'where are you',
+                    'where r u', 'how r u',
+                    'are you a boy', 'are you a girl', 'r u a boy', 'r u a girl',
+                    'are you male', 'are you female',
+                    'send me', 'dm me', 'message me',
+                    'your number', 'your email', 'your snap',
+                    'your insta', 'your discord', 'your tiktok',
+                    'your age', 'your name', 'your address',
+                    'call me', 'text me', 'add me',
+                    'do you have', 'do you live',
+                    'is your name',
+                    'tell me about yourself',
+                ];
+                for (const pattern of askPatterns) {
+                    if (t.includes(pattern)) {
+                        return { safe: false, type: 'personal', message: 'Asking for personal information is not allowed. Please keep chat safe.' };
+                    }
+                }
+
+                for (const word of prohibitedWords) {
+                    const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/'/g, "'?").replace(/ /g, '\\s+');
+                    if (new RegExp('\\b' + escaped + '\\b', 'i').test(t)) {
+                        return { safe: false, type: 'prohibited', message: 'This message contains inappropriate content and cannot be sent.' };
+                    }
+                }
+
+                for (const phrase of crisisKeywords) {
+                    if (t.includes(phrase)) {
+                        return { safe: false, type: 'crisis', message: '' };
+                    }
                 }
             }
 
