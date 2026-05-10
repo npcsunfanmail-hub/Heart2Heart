@@ -78,9 +78,6 @@
         <div style="background: #9c27b0; color: white; padding: 12px 16px; display: flex; align-items: center; gap: 8px; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
             <img src="logo.svg" alt="Heart2Heart" style="width: 28px; height: 28px;">
             <span style="font-size: 18px; font-weight: 700;">Heart2Heart</span>
-            <span style="margin-left: auto; font-size: 13px; opacity: 0.85; display: flex; align-items: center; gap: 4px;">
-                <span id="activeCount">0</span> people online
-            </span>
         </div>
         
         <!-- Onboarding Section -->
@@ -515,53 +512,6 @@
             }
         }
 
-        // Presence tracking
-        let presenceInterval = null;
-
-        function startPresence(userId) {
-            const presenceRef = db.collection('presence').doc(userId);
-            function heartbeat() {
-                const ageGroup = currentUser ? currentUser.ageGroup : '';
-                presenceRef.set({ online: true, lastSeen: Date.now(), ageGroup });
-            }
-            heartbeat();
-            if (presenceInterval) clearInterval(presenceInterval);
-            presenceInterval = setInterval(heartbeat, 20000);
-        }
-
-        function stopPresence(userId) {
-            if (presenceInterval) { clearInterval(presenceInterval); presenceInterval = null; }
-            if (userId) db.collection('presence').doc(userId).delete().catch(() => {});
-        }
-
-        window.addEventListener('beforeunload', () => {
-            if (currentUser) stopPresence(currentUser.id);
-        });
-
-        // Active user count
-        let countInterval = null;
-        async function updateActiveCount() {
-            try {
-                const cutoff = Date.now() - 60000;
-                const snap = await db.collection('presence').get();
-                let count = 0;
-                const myAge = currentUser ? currentUser.ageGroup : null;
-                const batch = [];
-                snap.forEach(doc => {
-                    const data = doc.data();
-                    if (data.lastSeen && data.lastSeen > cutoff && data.online) {
-                        if (!myAge || data.ageGroup === myAge) count++;
-                    } else if (!data.lastSeen || data.lastSeen <= cutoff) {
-                        batch.push(doc.ref.delete());
-                    }
-                });
-                document.getElementById('activeCount').textContent = count;
-                Promise.all(batch).catch(() => {});
-            } catch (e) {
-                console.log('Count error:', e);
-            }
-        }
-
         // Onboarding
         document.getElementById('startBtn').addEventListener('click', () => {
             const ageGroup = document.getElementById('ageGroup').value;
@@ -572,9 +522,6 @@
                 createdAt: new Date()
             };
             localStorage.setItem('kidsCopeUser', JSON.stringify(currentUser));
-            startPresence(currentUser.id);
-            updateActiveCount();
-            if (!countInterval) countInterval = setInterval(updateActiveCount, 15000);
             switchSection('home');
             updateSafetyTip();
         });
@@ -583,12 +530,8 @@
         const savedUser = localStorage.getItem('kidsCopeUser');
         if (savedUser) {
             currentUser = JSON.parse(savedUser);
-            startPresence(currentUser.id);
             switchSection('home');
         }
-
-        updateActiveCount();
-        if (!countInterval) countInterval = setInterval(updateActiveCount, 15000);
 
         // Landing Page Buttons
         document.getElementById('goToTopicsBtn').addEventListener('click', () => {
@@ -636,7 +579,6 @@
                 db.collection('sessions').doc(currentSession.id).delete().catch(() => {});
                 resetMatching();
             }
-            stopPresence(currentUser ? currentUser.id : null);
             localStorage.removeItem('kidsCopeUser');
             localStorage.removeItem('termsAccepted');
             currentUser = null;
